@@ -213,13 +213,15 @@ private:
     const string &field_var,
     bool field_var_is_ref,
     t_field *tfield,
-    t_field::e_req req);
+    t_field::e_req req,
+    bool field_var_needs_deref
+    );
 
   // Write the rust function that serializes a single type (i.e. a i32 etc.) to its wire representation.
   // Variables in auto-generated code are passed by reference. Since this function may be called in
   // contexts where the variable is *already* a reference you can set `type_var_is_ref` to `true` to avoid
   // generating an extra, unnecessary `&` that the compiler will have to automatically dereference.
-  void render_type_sync_write(const string &type_var, bool type_var_is_ref, t_type *ttype);
+  void render_type_sync_write(const string &type_var, bool type_var_is_ref, t_type *ttype, bool type_var_needs_deref);
 
   // Write a list to the output protocol. `list_variable` is the variable containing the list
   // that will be written to the output protocol.
@@ -1125,46 +1127,56 @@ void t_rs_generator::render_exception_struct_error_trait_impls(const string& str
 }
 
 void t_rs_generator::render_struct_default_trait_impl(const string& struct_name, t_struct* tstruct) {
-  bool has_required_field = false;
+    bool has_required_field = false;
 
-  const vector<t_field*>& members = tstruct->get_sorted_members();
-  vector<t_field*>::const_iterator members_iter;
-  for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
-    t_field* member = *members_iter;
-    if (!is_optional(member->get_req())) {
-      has_required_field = true;
-      break;
-    }
-  }
-
-  if (has_required_field) {
-    return;
-  }
-
-  f_gen_ << "impl Default for " << struct_name << " {" << endl;
-  indent_up();
-  f_gen_ << indent() << "fn default() -> Self {" << endl;
-  indent_up();
-
-  if (members.empty()) {
-    f_gen_ << indent() << struct_name << "{}" << endl;
-  } else {
-    f_gen_ << indent() << struct_name << "{" << endl;
-    indent_up();
+    const vector<t_field*>& members = tstruct->get_sorted_members();
+    vector<t_field*>::const_iterator members_iter;
     for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
-      t_field *member = (*members_iter);
-      string member_name(rust_field_name(member));
-      f_gen_ << indent() << member_name << ": " << opt_in_req_out_value(member->get_type()) << "," << endl;
+	t_field* member = *members_iter;
+	if (!is_optional(member->get_req())) {
+	    has_required_field = true;
+	    break;
+	}
     }
-    indent_down();
-    f_gen_ << indent() << "}" << endl;
-  }
 
-  indent_down();
-  f_gen_ << indent() << "}" << endl;
-  indent_down();
-  f_gen_ << "}" << endl;
-  f_gen_ << endl;
+    if (has_required_field) {
+	return;
+    }
+
+    f_gen_ << "impl Default for " << struct_name << " {" << endl;
+    indent_up();
+    f_gen_ << indent() << "fn default() -> Self {" << endl;
+    indent_up();
+
+    if (members.empty()) {
+	f_gen_ << indent() << struct_name << "{}" << endl;
+    } else {
+	f_gen_ << indent() << struct_name << "{" << endl;
+	indent_up();
+	for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
+	    t_field *member = (*members_iter);
+	    string member_name(rust_field_name(member));
+	    f_gen_ << indent() << member_name << ": ";
+
+	    if (member->get_value()) {
+		f_gen_ << "Some(" << endl;
+		render_const_value(member->get_type(),member->get_value());
+		f_gen_ << endl << ")";
+	    } else {
+		f_gen_ << opt_in_req_out_value(member->get_type());
+	    }
+	    f_gen_ << "," << endl;
+	}
+	indent_down();
+	f_gen_ << indent() << "}" << endl;
+
+
+	indent_down();
+	f_gen_ << indent() << "}" << endl;
+	indent_down();
+	f_gen_ << "}" << endl;
+	f_gen_ << endl;
+    }
 }
 
 void t_rs_generator::render_struct_impl(
@@ -1578,7 +1590,7 @@ void t_rs_generator::render_struct_sync_write(
       t_field* member = (*members_iter);
       t_field::e_req member_req = actual_field_req(member, struct_type);
       string member_var("self." + rust_field_name(member));
-      render_struct_field_sync_write(member_var, false, member, member_req);
+      render_struct_field_sync_write(member_var, false, member, member_req, false);
     }
   }
 
@@ -1612,14 +1624,15 @@ void t_rs_generator::render_union_sync_write(const string &union_name, t_struct 
       t_field* member = (*members_iter);
       t_field::e_req member_req = t_field::T_REQUIRED;
       t_type* ttype = member->get_type();
-      string match_var((ttype->is_base_type() && !ttype->is_string()) ? "f" : "ref f");
+      bool field_var_needs_deref = !(ttype->is_base_type() && !ttype->is_string());
+      string match_var(!field_var_needs_deref ? "f" : "ref f");
       f_gen_
         << indent()
         << union_name << "::" << rust_union_field_name(member)
         << "(" << match_var << ") => {"
         << endl;
       indent_up();
-      render_struct_field_sync_write("f", true, member, member_req);
+      render_struct_field_sync_write("f", true, member, member_req, field_var_needs_deref);
       indent_down();
       f_gen_ << indent() << "}," << endl;
     }
@@ -1639,7 +1652,8 @@ void t_rs_generator::render_struct_field_sync_write(
   const string &field_var,
   bool field_var_is_ref,
   t_field *tfield,
-  t_field::e_req req
+  t_field::e_req req,
+  bool field_var_needs_deref
 ) {
   t_type* field_type = tfield->get_type();
   t_type* actual_type = get_true_type(field_type);
@@ -1653,11 +1667,12 @@ void t_rs_generator::render_struct_field_sync_write(
   string field_ident_string = field_stream.str();
 
   if (is_optional(req)) {
-    string let_var((actual_type->is_base_type() && !actual_type->is_string()) ? "fld_var" : "ref fld_var");
+    bool deref_on_write = !(actual_type->is_base_type() && !actual_type->is_string());
+    string let_var(!deref_on_write ? "fld_var" : "ref fld_var");
     f_gen_ << indent() << "if let Some(" << let_var << ") = " << field_var << " {" << endl;
     indent_up();
     f_gen_ << indent() << "o_prot.write_field_begin(&" << field_ident_string << ")?;" << endl;
-    render_type_sync_write("fld_var", true, field_type);
+    render_type_sync_write("fld_var", true, field_type, deref_on_write);
     f_gen_ << indent() << "o_prot.write_field_end()?;" << endl;
     f_gen_ << indent() << "()" << endl; // FIXME: remove this extraneous '()'
     indent_down();
@@ -1674,12 +1689,12 @@ void t_rs_generator::render_struct_field_sync_write(
     f_gen_ << indent() << "}" << endl;
   } else {
     f_gen_ << indent() << "o_prot.write_field_begin(&" << field_ident_string << ")?;" << endl;
-    render_type_sync_write(field_var, field_var_is_ref, tfield->get_type());
+    render_type_sync_write(field_var, field_var_is_ref, tfield->get_type(), field_var_needs_deref);
     f_gen_ << indent() << "o_prot.write_field_end()?;" << endl;
   }
 }
 
-void t_rs_generator::render_type_sync_write(const string &type_var, bool type_var_is_ref, t_type *ttype) {
+void t_rs_generator::render_type_sync_write(const string &type_var, bool type_var_is_ref, t_type *ttype, bool type_var_needs_deref) {
   if (ttype->is_base_type()) {
     t_base_type* tbase_type = (t_base_type*)ttype;
     switch (tbase_type->get_base()) {
@@ -1695,27 +1710,27 @@ void t_rs_generator::render_type_sync_write(const string &type_var, bool type_va
       return;
     }
     case t_base_type::TYPE_BOOL:
-      f_gen_ << indent() << "o_prot.write_bool(" + type_var + ")?;" << endl;
+      f_gen_ << indent() << "o_prot.write_bool(" << (type_var_needs_deref ? "*" : "") + type_var + ")?;" << endl;
       return;
     case t_base_type::TYPE_I8:
-      f_gen_ << indent() << "o_prot.write_i8(" + type_var + ")?;" << endl;
+      f_gen_ << indent() << "o_prot.write_i8(" << (type_var_needs_deref ? "*" : "") + type_var + ")?;" << endl;
       return;
     case t_base_type::TYPE_I16:
-      f_gen_ << indent() << "o_prot.write_i16(" + type_var + ")?;" << endl;
+      f_gen_ << indent() << "o_prot.write_i16(" << (type_var_needs_deref ? "*" : "") + type_var + ")?;" << endl;
       return;
     case t_base_type::TYPE_I32:
-      f_gen_ << indent() << "o_prot.write_i32(" + type_var + ")?;" << endl;
+      f_gen_ << indent() << "o_prot.write_i32(" << (type_var_needs_deref ? "*" : "") + type_var + ")?;" << endl;
       return;
     case t_base_type::TYPE_I64:
-      f_gen_ << indent() << "o_prot.write_i64(" + type_var + ")?;" << endl;
+      f_gen_ << indent() << "o_prot.write_i64(" << (type_var_needs_deref ? "*" : "") + type_var + ")?;" << endl;
       return;
     case t_base_type::TYPE_DOUBLE:
-      f_gen_ << indent() << "o_prot.write_double(" + type_var + ".into())?;" << endl;
+      f_gen_ << indent() << "o_prot.write_double(" << (type_var_needs_deref ? "*" : "") + type_var + ".into())?;" << endl;
       return;
     }
   } else if (ttype->is_typedef()) {
     t_typedef* ttypedef = (t_typedef*) ttype;
-    render_type_sync_write(type_var, type_var_is_ref, ttypedef->get_type());
+    render_type_sync_write(type_var, type_var_is_ref, ttypedef->get_type(), type_var_needs_deref);
     return;
   } else if (ttype->is_enum() || ttype->is_struct() || ttype->is_xception()) {
     f_gen_ << indent() << type_var + ".write_to_out_protocol(o_prot)?;" << endl;
@@ -1749,7 +1764,7 @@ void t_rs_generator::render_list_sync_write(const string &list_var, bool list_va
   string ref(list_var_is_ref ? "" : "&");
   f_gen_ << indent() << "for e in " << ref << list_var << " {" << endl;
   indent_up();
-  render_type_sync_write(needs_deref_on_container_write(elem_type) ? "*e" : "e", true, elem_type);
+  render_type_sync_write("e", true, elem_type, needs_deref_on_container_write(elem_type));
   f_gen_ << indent() << "o_prot.write_list_end()?;" << endl;
   indent_down();
   f_gen_ << indent() << "}" << endl;
@@ -1770,7 +1785,7 @@ void t_rs_generator::render_set_sync_write(const string &set_var, bool set_var_i
   string ref(set_var_is_ref ? "" : "&");
   f_gen_ << indent() << "for e in " << ref << set_var << " {" << endl;
   indent_up();
-  render_type_sync_write(needs_deref_on_container_write(elem_type) ? "*e" : "e", true, elem_type);
+  render_type_sync_write("e", true, elem_type, needs_deref_on_container_write(elem_type));
   f_gen_ << indent() << "o_prot.write_set_end()?;" << endl;
   indent_down();
   f_gen_ << indent() << "}" << endl;
@@ -1793,8 +1808,8 @@ void t_rs_generator::render_map_sync_write(const string &map_var, bool map_var_i
   string ref(map_var_is_ref ? "" : "&");
   f_gen_ << indent() << "for (k, v) in " << ref << map_var << " {" << endl;
   indent_up();
-  render_type_sync_write(needs_deref_on_container_write(key_type) ? "*k" : "k", true, key_type);
-  render_type_sync_write(needs_deref_on_container_write(val_type) ? "*v" : "v", true, val_type);
+  render_type_sync_write("k", true, key_type, needs_deref_on_container_write(key_type));
+  render_type_sync_write("v", true, val_type, needs_deref_on_container_write(val_type));
   f_gen_ << indent() << "o_prot.write_map_end()?;" << endl;
   indent_down();
   f_gen_ << indent() << "}" << endl;
@@ -1836,8 +1851,16 @@ void t_rs_generator::render_struct_sync_read(
       << indent()
       << "let mut " << struct_field_read_temp_variable(member)
       << ": Option<" << to_rust_type(member->get_type()) << "> = ";
-      if (member_req == t_field::T_OPT_IN_REQ_OUT) {
-        f_gen_ << opt_in_req_out_value(member->get_type()) << ";";
+    if (member_req == t_field::T_OPT_IN_REQ_OUT) {
+	if (member->get_value()) {
+	    f_gen_ << "Some(" << endl;
+	    render_const_value(member->get_type(),member->get_value());
+	    f_gen_ << endl << ")";
+	} else {
+	    f_gen_ << opt_in_req_out_value(member->get_type());
+	}
+
+	f_gen_ << ";";
       } else {
         f_gen_ << "None;";
       }
@@ -3171,14 +3194,14 @@ string t_rs_generator::opt_in_req_out_value(t_type* ttype) {
         return "Some(\"\".to_owned())";
       }
     case t_base_type::TYPE_BOOL:
-      return "Some(false)";
+      return "None";
     case t_base_type::TYPE_I8:
     case t_base_type::TYPE_I16:
     case t_base_type::TYPE_I32:
     case t_base_type::TYPE_I64:
-      return "Some(0)";
+      return "None";
     case t_base_type::TYPE_DOUBLE:
-      return "Some(OrderedFloat::from(0.0))";
+      return "None";
     }
 
   } else if (ttype->is_enum() || ttype->is_struct() || ttype->is_xception()) {
