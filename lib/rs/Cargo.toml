@@ -14,5 +14,5 @@ keywords = ["thrift"]
 integer-encoding = "1.0.3"
 byteorder = "0.5.3"
 try_from = "0.2.0"
-slog="~2.5"
+slog="~2"
 
