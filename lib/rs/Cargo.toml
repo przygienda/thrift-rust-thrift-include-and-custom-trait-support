@@ -11,8 +11,8 @@ exclude = ["Makefile*", "test/**"]
 keywords = ["thrift"]
 
 [dependencies]
-integer-encoding = "1.0.3"
-byteorder = "0.5.3"
-try_from = "0.2.0"
-slog="~2.4"
+integer-encoding = {version = "~1.0.3", registry = "crates-io-mirror" }
+byteorder = {version = "~0.5.3", registry = "crates-io-mirror" }
+try_from = {version = "~0.2.0", registry = "crates-io-mirror" }
+slog= {version = "~2.4", registry = "crates-io-mirror" }
 
