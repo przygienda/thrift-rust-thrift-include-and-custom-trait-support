@@ -52,7 +52,7 @@ extern crate integer_encoding;
 extern crate try_from;
 
 #[macro_use]
-extern crate log;
+extern crate slog;
 
 // NOTE: this macro has to be defined before any modules. See:
 // https://danielkeep.github.io/quick-intro-to-macros.html#some-more-gotchas

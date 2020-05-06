@@ -18,6 +18,7 @@
 use std::cell::RefCell;
 use std::net::{TcpListener, TcpStream};
 use std::rc::Rc;
+use slog::{Logger, Discard};
 
 use ::{ApplicationError, ApplicationErrorKind};
 use ::protocol::{TInputProtocolFactory, TOutputProtocolFactory};
@@ -112,6 +113,7 @@ pub struct TSimpleServer<PR: TProcessor> {
     o_trans_factory: Box<TTransportFactory>,
     o_proto_factory: Box<TOutputProtocolFactory>,
     processor: PR,
+    log: Logger,
 }
 
 impl<PR: TProcessor> TSimpleServer<PR> {
@@ -134,6 +136,7 @@ impl<PR: TProcessor> TSimpleServer<PR> {
             o_trans_factory: output_transport_factory,
             o_proto_factory: output_protocol_factory,
             processor: processor,
+            log: Logger::root(Discard, o!("version" => "FRE FSM test")),
         }
     }
 
@@ -151,7 +154,7 @@ impl<PR: TProcessor> TSimpleServer<PR> {
         for stream in listener.incoming() {
             match stream {
                 Ok(s) => self.handle_incoming_connection(s),
-                Err(e) => warn!("failed to accept remote connection with error {:?}", e),
+                Err(e) => warn!(&self.log, "failed to accept remote connection with error {:?}", e),
             }
         }
 
@@ -181,7 +184,7 @@ impl<PR: TProcessor> TSimpleServer<PR> {
         loop {
             let r = self.processor.process(&mut *i_prot, &mut *o_prot);
             if let Err(e) = r {
-                warn!("processor failed with error: {:?}", e);
+                warn!(&self.log, "processor failed with error: {:?}", e);
                 break; // FIXME: close here
             }
         }

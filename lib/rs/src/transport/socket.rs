@@ -20,6 +20,7 @@ use std::io;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::ops::Drop;
+use slog::{Logger, Discard};
 
 use ::{TransportError, TransportErrorKind};
 
@@ -135,7 +136,8 @@ impl Write for TTcpTransport {
 impl Drop for TTcpTransport {
     fn drop(&mut self) {
         if let Err(e) = self.close() {
-            warn!("error while closing socket transport: {:?}", e)
+            let log = Logger::root(Discard, o!("version" => "FRE FSM test"));
+            warn!(&log, "error while closing socket transport: {:?}", e)
         }
     }
 }

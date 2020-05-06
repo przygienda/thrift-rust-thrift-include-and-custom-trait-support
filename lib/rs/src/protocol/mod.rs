@@ -69,6 +69,7 @@ use std::fmt::{Display, Formatter};
 use std::convert::From;
 use std::rc::Rc;
 use try_from::TryFrom;
+use slog::Logger;
 
 use ::{ProtocolError, ProtocolErrorKind};
 use ::transport::TTransport;
@@ -123,6 +124,8 @@ const MAXIMUM_SKIP_DEPTH: i8 = 64;
 /// let field_end = i_prot.read_field_end().unwrap();
 /// ```
 pub trait TInputProtocol {
+    fn set_logger(&mut self, Logger) {}
+
     /// Read the beginning of a Thrift message.
     fn read_message_begin(&mut self) -> ::Result<TMessageIdentifier>;
     /// Read the end of a Thrift message.

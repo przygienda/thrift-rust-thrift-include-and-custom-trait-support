@@ -21,6 +21,7 @@ use std::convert::From;
 use std::io::{Read, Write};
 use std::rc::Rc;
 use try_from::TryFrom;
+use slog::{Logger, Discard};
 
 use ::{ProtocolError, ProtocolErrorKind};
 use ::transport::TTransport;
@@ -58,9 +59,11 @@ const BINARY_PROTOCOL_VERSION_1: u32 = 0x80010000;
 pub struct TBinaryInputProtocol {
     strict: bool,
     transport: Rc<RefCell<Box<TTransport>>>,
+    log: Option<Logger>,
 }
 
 impl TBinaryInputProtocol {
+
     /// Create a `TBinaryInputProtocol` that reads bytes from `transport`.
     ///
     /// Set `strict` to `true` if all incoming messages contain the protocol
@@ -69,14 +72,24 @@ impl TBinaryInputProtocol {
         TBinaryInputProtocol {
             strict: strict,
             transport: transport,
+            log: None,
         }
     }
 }
 
 impl TInputProtocol for TBinaryInputProtocol {
+    fn set_logger(&mut self, log: Logger) {
+        self.log = Some(log);
+    }
+
     #[cfg_attr(feature = "cargo-clippy", allow(collapsible_if))]
     fn read_message_begin(&mut self) -> ::Result<TMessageIdentifier> {
         let mut first_bytes = vec![0; 4];
+
+        if let Some(ref l) = self.log {
+            debug!(l, "read_message_begin: first bytes");
+        }
+
         self.transport.borrow_mut().read_exact(&mut first_bytes[..])?;
 
         // the thrift version header is intentionally negative
@@ -110,14 +123,36 @@ impl TInputProtocol for TBinaryInputProtocol {
                 // in the non-strict version the first message field
                 // is the message name. strings (byte arrays) are length-prefixed,
                 // so we've just read the length in the first 4 bytes
+                if let Some(ref l) = self.log {
+                    debug!(l, "read_message_begin: reading message length");
+                }
+
                 let name_size = BigEndian::read_i32(&first_bytes) as usize;
+
+                if let Some(ref l) = self.log {
+                    debug!(l, "read_message_begin: message length {}", name_size);
+                }
                 let mut name_buf: Vec<u8> = Vec::with_capacity(name_size);
                 self.transport.borrow_mut().read_exact(&mut name_buf)?;
+
+                if let Some(ref l) = self.log {
+                    debug!(l, "read_message_begin: read name {:?}", &name_buf);
+                }
+
                 let name = String::from_utf8(name_buf)?;
 
                 // read the rest of the fields
+                if let Some(ref l) = self.log {
+                    debug!(l, "read_message_begin: reading message type");
+                }
+
                 let message_type: TMessageType = self.read_byte().and_then(TryFrom::try_from)?;
                 let sequence_number = self.read_i32()?;
+
+                // read the rest of the fields
+                if let Some(ref l) = self.log {
+                    debug!(l, "read_message_begin: read message type {}", &message_type);
+                }
                 Ok(TMessageIdentifier::new(name, message_type, sequence_number))
             }
         }
