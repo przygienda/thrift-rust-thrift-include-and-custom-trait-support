@@ -894,6 +894,16 @@ void t_py_generator::generate_py_struct_reader(ofstream& out, t_struct* tstruct)
   }
   indent_down();
 
+  static char TEMP_VAR_PREFIX[] = "__var_";
+
+  for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
+    if (is_immutable(tstruct)) {
+      out << indent() << TEMP_VAR_PREFIX << (*f_iter)->get_name() << "= None" << endl;
+    } else {
+      out << indent() << "self." << (*f_iter)->get_name() << " = None" << endl;
+    }
+  }
+
   indent(out) << "iprot.readStructBegin()" << endl;
 
   // Loop over reading in fields
@@ -925,7 +935,7 @@ void t_py_generator::generate_py_struct_reader(ofstream& out, t_struct* tstruct)
     indent(out) << "if ftype == " << type_to_enum((*f_iter)->get_type()) << ":" << endl;
     indent_up();
     if (is_immutable(tstruct)) {
-      generate_deserialize_field(out, *f_iter);
+      generate_deserialize_field(out, *f_iter, TEMP_VAR_PREFIX);
     } else {
       generate_deserialize_field(out, *f_iter, "self.");
     }
@@ -948,7 +958,7 @@ void t_py_generator::generate_py_struct_reader(ofstream& out, t_struct* tstruct)
     indent(out) << "return cls(" << endl;
     indent_up();
     for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
-      indent(out) << (*f_iter)->get_name() << "=" << (*f_iter)->get_name() << "," << endl;
+      indent(out) << (*f_iter)->get_name() << "=" << TEMP_VAR_PREFIX << (*f_iter)->get_name() << "," << endl;
     }
     indent_down();
     indent(out) << ")" << endl;
