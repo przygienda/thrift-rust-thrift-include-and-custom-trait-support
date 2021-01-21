@@ -894,6 +894,15 @@ void t_py_generator::generate_py_struct_reader(ofstream& out, t_struct* tstruct)
   }
   indent_down();
 
+  out << indent() << "# initialize local variables" << endl;
+  if (is_immutable(tstruct)) {
+      // in case of immutables we may have local variables being read and those better have
+      // some values if they're optional
+      for (f_iter = fields.begin(); f_iter != fields.end(); ++f_iter) {
+        out << indent() << (*f_iter)->get_name() << " = " << render_field_default_value(*f_iter) << endl;
+      }
+  }
+
   indent(out) << "iprot.readStructBegin()" << endl;
 
   // Loop over reading in fields
