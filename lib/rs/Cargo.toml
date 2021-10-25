@@ -1,7 +1,7 @@
 [package]
 name = "thrift"
-description = "Rust bindings for the Apache Thrift RPC system"
-version = "1.0.0"
+description = "Rust bindings for the Apache Thrift RPC system (Juniper Mods)"
+version = "1.0.1"
 license = "Apache-2.0"
 authors = ["Apache Thrift Developers <dev@thrift.apache.org>"]
 homepage = "http://thrift.apache.org"
@@ -9,10 +9,11 @@ documentation = "https://thrift.apache.org"
 readme = "README.md"
 exclude = ["Makefile*", "test/**"]
 keywords = ["thrift"]
+publish = ["juniper"]
 
 [dependencies]
-integer-encoding = "1.0.3"
-log = "~0.3.6"
-byteorder = "0.5.3"
-try_from = "0.2.0"
+integer-encoding = { version = "1.0.3", registry = "crates-io-mirror" }
+log = { version = "~0.3.6", registry = "crates-io-mirror" }
+byteorder = { version = "0.5.3", registry = "crates-io-mirror" }
+try_from = { version = "0.2.0", registry = "crates-io-mirror" }
 
