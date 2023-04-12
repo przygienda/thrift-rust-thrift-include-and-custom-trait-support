@@ -24,10 +24,10 @@ use std::rc::Rc;
 use super::{TTransport, TTransportFactory};
 
 /// Default capacity of the read buffer in bytes.
-const DEFAULT_RBUFFER_CAPACITY: usize = 2 * 8192;
+const DEFAULT_RBUFFER_CAPACITY: usize = 65535;
 
 /// Default capacity of the write buffer in bytes..
-const DEFAULT_WBUFFER_CAPACITY: usize = 2 * 8192;
+const DEFAULT_WBUFFER_CAPACITY: usize = 65535;
 
 /// Transport that communicates with endpoints using a byte stream.
 ///
