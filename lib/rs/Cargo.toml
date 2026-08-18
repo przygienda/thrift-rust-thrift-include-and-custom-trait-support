@@ -9,7 +9,6 @@ documentation = "https://thrift.apache.org"
 readme = "README.md"
 exclude = ["Makefile*", "test/**"]
 keywords = ["thrift"]
-publish = ["juniper"]
 
 [dependencies]
 integer-encoding = { version = "1.0.3" }
