@@ -3283,7 +3283,7 @@ string t_rs_generator::rust_namespace(t_service* tservice) {
         if (ns.length()>0) {
             p += "::" + ns + "::";
         }
-        p += tservice->get_program()->get_name() + "::";
+        p += rust_snake_case(tservice->get_program()->get_name()) + "::";
     }
     
     return p;
@@ -3297,7 +3297,7 @@ string t_rs_generator::rust_namespace(t_type* ttype) {
             p += "::" + ns + "::";
         }
 
-        p += ttype->get_program()->get_name() + "::";
+        p += rust_snake_case(ttype->get_program()->get_name()) + "::";
     }
 
     return p;
