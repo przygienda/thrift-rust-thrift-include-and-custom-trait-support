@@ -1127,56 +1127,59 @@ void t_rs_generator::render_exception_struct_error_trait_impls(const string& str
 }
 
 void t_rs_generator::render_struct_default_trait_impl(const string& struct_name, t_struct* tstruct) {
-    bool has_required_field = false;
+  bool has_required_field = false;
 
-    const vector<t_field*>& members = tstruct->get_sorted_members();
-    vector<t_field*>::const_iterator members_iter;
+  const vector<t_field*>& members = tstruct->get_sorted_members();
+  vector<t_field*>::const_iterator members_iter;
+  for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
+    t_field* member = *members_iter;
+    if (!is_optional(member->get_req())) {
+      has_required_field = true;
+      break;
+    }
+  }
+
+  if (has_required_field) {
+    return;
+  }
+
+  f_gen_ << "impl Default for " << struct_name << " {" << endl;
+  indent_up();
+  f_gen_ << indent() << "fn default() -> Self {" << endl;
+  indent_up();
+
+  if (members.empty()) {
+    f_gen_ << indent() << struct_name << "{}" << endl;
+  } else {
+    f_gen_ << indent() << struct_name << "{" << endl;
+    indent_up();
     for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
-	t_field* member = *members_iter;
-	if (!is_optional(member->get_req())) {
-	    has_required_field = true;
-	    break;
-	}
+      t_field* member = (*members_iter);
+      string member_name(rust_field_name(member));
+      f_gen_ << indent() << member_name << ": ";
+
+      // a field carrying a default value in the IDL is initialized with it; every
+      // other field falls back to the opt-in-req-out zero value. Wrapping in `Some`
+      // is safe because this impl is only rendered when no field is required, which
+      // means every field is rendered as an `Option<T>`.
+      if (member->get_value()) {
+        f_gen_ << "Some(" << endl;
+        render_const_value(member->get_type(), member->get_value());
+        f_gen_ << endl << ")";
+      } else {
+        f_gen_ << opt_in_req_out_value(member->get_type());
+      }
+      f_gen_ << "," << endl;
     }
+    indent_down();
+    f_gen_ << indent() << "}" << endl;
+  }
 
-    if (has_required_field) {
-	return;
-    }
-
-    f_gen_ << "impl Default for " << struct_name << " {" << endl;
-    indent_up();
-    f_gen_ << indent() << "fn default() -> Self {" << endl;
-    indent_up();
-
-    if (members.empty()) {
-	f_gen_ << indent() << struct_name << "{}" << endl;
-    } else {
-	f_gen_ << indent() << struct_name << "{" << endl;
-	indent_up();
-	for (members_iter = members.begin(); members_iter != members.end(); ++members_iter) {
-	    t_field *member = (*members_iter);
-	    string member_name(rust_field_name(member));
-	    f_gen_ << indent() << member_name << ": ";
-
-	    if (member->get_value()) {
-		f_gen_ << "Some(" << endl;
-		render_const_value(member->get_type(),member->get_value());
-		f_gen_ << endl << ")";
-	    } else {
-		f_gen_ << opt_in_req_out_value(member->get_type());
-	    }
-	    f_gen_ << "," << endl;
-	}
-	indent_down();
-	f_gen_ << indent() << "}" << endl;
-
-
-	indent_down();
-	f_gen_ << indent() << "}" << endl;
-	indent_down();
-	f_gen_ << "}" << endl;
-	f_gen_ << endl;
-    }
+  indent_down();
+  f_gen_ << indent() << "}" << endl;
+  indent_down();
+  f_gen_ << "}" << endl;
+  f_gen_ << endl;
 }
 
 void t_rs_generator::render_struct_impl(
@@ -1472,10 +1475,10 @@ void t_rs_generator::render_union_definition(const string& union_name, t_struct*
         << indent()
         << tfield->get_key() << " => "
         << "Ok(" << union_name << "::" << rust_union_field_name(tfield)
-        << "(try!($applyfn("
+        << "($applyfn("
         << tfield->get_key() << ","
         << '"' << rust_union_field_name(tfield) << '"' << " "
-        << " $(,$addarg)*)))),"
+        << " $(,$addarg)*)?)),"
         << endl;
     }
 
@@ -1852,19 +1855,18 @@ void t_rs_generator::render_struct_sync_read(
       << "let mut " << struct_field_read_temp_variable(member)
       << ": Option<" << to_rust_type(member->get_type()) << "> = ";
     if (member_req == t_field::T_OPT_IN_REQ_OUT) {
-	if (member->get_value()) {
-	    f_gen_ << "Some(" << endl;
-	    render_const_value(member->get_type(),member->get_value());
-	    f_gen_ << endl << ")";
-	} else {
-	    f_gen_ << opt_in_req_out_value(member->get_type());
-	}
-
-	f_gen_ << ";";
+      if (member->get_value()) {
+        f_gen_ << "Some(" << endl;
+        render_const_value(member->get_type(), member->get_value());
+        f_gen_ << endl << ")";
       } else {
-        f_gen_ << "None;";
+        f_gen_ << opt_in_req_out_value(member->get_type());
       }
-      f_gen_ << endl;
+      f_gen_ << ";";
+    } else {
+      f_gen_ << "None;";
+    }
+    f_gen_ << endl;
   }
 
   // now loop through the fields we've received
